@@ -51,7 +51,7 @@ if enable_overwrite or not os.path.exists(export_model_path):
 os.system("python -m onnxruntime.transformers.optimizer --input attention.onnx --output attention.opt.onnx")
 
 # Added template attention layers
-onnx_opted_attention = onnx.load_model("yukon.onnx")
+onnx_opted_attention = onnx.load_model("attention.opt.onnx")
 onnx_attention_opted_graph = onnx_opted_attention.graph
 
 def split_qkv_weight(graph, qkv_weight, prefix):
