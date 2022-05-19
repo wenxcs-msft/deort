@@ -51,7 +51,7 @@ if enable_overwrite or not os.path.exists(export_model_path):
 os.system("python -m onnxruntime.transformers.optimizer --input attention.onnx --output attention.opt.onnx")
 
 # Added template attention layers
-onnx_opted_attention = onnx.load_model("attention.opt.onnx")
+onnx_opted_attention = onnx.load_model("optimized.onnx")
 onnx_attention_opted_graph = onnx_opted_attention.graph
 
 def split_qkv_weight(graph, qkv_weight, prefix):
@@ -135,7 +135,7 @@ def generate_attention_subgraph(hidden_state, qkv_weight, qkv_bias, attention_ma
     # to broken un-optimized version
     onnx_attention = onnx.load_model("attention.onnx")
     onnx_attention_graph = onnx_attention.graph
-    remove_list = ['Cast_2', 'Constant_5', 'Constant_7','Unsqueeze_3', 'Unsqueeze_4', 'Sub_6', 'Mul_8']
+    remove_list = ['Cast_2', 'Constant_5', 'Constant_7', 'Constant_49','Unsqueeze_3', 'Unsqueeze_4', 'Sub_6', 'Mul_8']
 
     nodes_list = []
     appened_mode = False
@@ -172,6 +172,9 @@ def generate_attention_subgraph(hidden_state, qkv_weight, qkv_bias, attention_ma
 
         if node.name == prefix + "MatMul_23":
             node.input[0] = hidden_state
+        
+        if node.name == prefix + "Div_50":
+            node.input[1] = prefix + "76_half"
     
     q_weight, k_weight, v_weight = split_qkv_weight(origin_attention_graph, qkv_weight, prefix)
     q_bias, k_bias, v_bias = split_qkv_bias(origin_attention_graph, qkv_bias, prefix)
@@ -195,13 +198,14 @@ def generate_attention_subgraph(hidden_state, qkv_weight, qkv_bias, attention_ma
     graph_def.initializer.append(q_bias)
     graph_def.initializer.append(k_bias)
     graph_def.initializer.append(v_bias)
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '116', data_type=TensorProto.INT64, dims=[], vals=[12]))
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '117', data_type=TensorProto.INT64, dims=[], vals=[64]))
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '111', data_type=TensorProto.INT64, dims=[], vals=[12]))
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '112', data_type=TensorProto.INT64, dims=[], vals=[64]))
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '114', data_type=TensorProto.INT64, dims=[], vals=[12]))
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '115', data_type=TensorProto.INT64, dims=[], vals=[64]))
-    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '118', data_type=TensorProto.INT64, dims=[], vals=[768]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '116', data_type=TensorProto.INT64, dims=[1], vals=[12]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '117', data_type=TensorProto.INT64, dims=[1], vals=[64]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '111', data_type=TensorProto.INT64, dims=[1], vals=[12]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '112', data_type=TensorProto.INT64, dims=[1], vals=[64]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '114', data_type=TensorProto.INT64, dims=[1], vals=[12]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '115', data_type=TensorProto.INT64, dims=[1], vals=[64]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '118', data_type=TensorProto.INT64, dims=[1], vals=[768]))
+    graph_def.initializer.append(onnx.helper.make_tensor( name=prefix + '76_half', data_type=TensorProto.FLOAT16, dims=[], vals=[8]))
 
     model_def = helper.make_model(graph_def, producer_name='onnx-example')
     #onnx.checker.check_model(model_def)
@@ -221,14 +225,14 @@ def replace_graph_attention_mask(graph):
         'Unsqueeze',
         inputs=[attention_mask_name],
         outputs=['0unsqz1'],
-        axes = 1
+        axes = [1]
     )
 
     unsqz2 = onnx.helper.make_node(
         'Unsqueeze',
         inputs=['0unsqz1'],
         outputs=['0unsqz2'],
-        axes = 2
+        axes = [2]
     )
 
     cast3 = onnx.helper.make_node(
@@ -291,5 +295,8 @@ def replace_graph_attention(graph):
             atn_list.append(node)
     for node in atn_list:
         graph.node.remove(node)
+    
 replace_graph_attention(onnx_attention_opted_graph)
-onnx.save_model(onnx_opted_attention, "attention.de_optimized.onnx")
+onnx_opted_attention.ir_version = 6
+#onnx_opted_attention.graph.ClearField('initializer')
+onnx.save_model(onnx_opted_attention, "de_optimized.onnx")
