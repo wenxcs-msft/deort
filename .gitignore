@@ -1,1 +1,4 @@
 *.onnx
+.env/
+.tmp/
+onnx/
