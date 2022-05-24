@@ -67,7 +67,8 @@ def get_numpy(tensor):
 
     dtype = get_numpy_dtype(tensor.type)
     shape = tensor.shape
-    check_shape(shape)
+    # check_shape(shape)
+    shape = [1, 128]
     print(shape)
     return np.ones(shape, dtype=dtype)
 
